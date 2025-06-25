@@ -1,0 +1,98 @@
+router.get("/doctor/dashboard", authMiddleware, authorizeRoles("doctor"), handler);
+router.get("/user/appointments", authMiddleware, authorizeRoles("patient", "doctor"), handler);
+-----------------------------------------------------------------------------------------------------
+📅 APPOINTMENTS MODULE
+9. POST /api/appointments/book
+Purpose: Book an appointment with a doctor.
+
+Access: Patient only.
+
+Body:
+
+json
+Copy
+Edit
+{
+  "doctorId": "<doctor_id>",
+  "slot": {
+    "date": "2025-06-22",
+    "time": "10:00 AM"
+  }
+}
+Returns: Booking confirmation + email trigger
+
+10. GET /api/appointments/my
+Purpose: Get current user’s (patient) appointments.
+
+Access: Authenticated patient.
+
+Returns: List of appointments (upcoming + past)
+
+11. GET /api/appointments/doctor
+Purpose: Get all appointments for the logged-in doctor.
+
+Access: Authenticated doctor.
+
+Returns: List of patients and booked slots
+
+12. PATCH /api/appointments/:id/status
+Purpose: Update appointment status (doctor or patient).
+
+Params: id = Appointment ID
+
+Body:
+
+json
+Copy
+Edit
+{
+  "status": "cancelled" // or "done"
+}
+Returns: Updated appointment
+
+--------------------------------------------------------------------------------------------
+🔔 NOTIFICATIONS MODULE (Optional/Bonus)
+13. POST /api/notifications/send
+Purpose: Trigger a test email/SMS (used internally).
+
+Access: System/admin/auto-triggered
+
+Body:
+
+json
+Copy
+Edit
+{
+  "to": "email@example.com",
+  "type": "booking",
+  "data": {
+    "doctorName": "Dr. Smith",
+    "date": "2025-06-20",
+    "time": "10:00 AM"
+  }
+}
+📊 ANALYTICS MODULE (Optional Admin/Doctor Feature)
+14. GET /api/appointments/stats
+Purpose: Get appointment stats (for dashboard charts).
+
+Access: Authenticated doctor or admin.
+
+Returns:
+
+json
+Copy
+Edit
+{
+  "totalAppointments": 20,
+  "upcoming": 5,
+  "completed": 10,
+  "cancelled": 5
+}
+🔐 MIDDLEWARES (not endpoints, but important)
+authMiddleware → Check JWT token
+
+roleMiddleware("doctor" | "patient") → Role-based access control
+---------------------------------------------------------------------------------------------------------
+
+
+
