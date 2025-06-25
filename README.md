@@ -150,7 +150,7 @@ npm install
 Backend: .env
 ```bash
 PORT=3000
-MONGODB_URI=mongodb://localhost:27017/mediconnect
+MONGODB_URI=your_mongodb_uri
 JWT_SECRET=your_jwt_secret
 JWT_EXPIRES_IN=7d
 CLOUDINARY_CLOUD_NAME=your_cloud_name
