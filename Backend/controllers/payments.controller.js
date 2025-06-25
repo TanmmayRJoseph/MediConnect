@@ -1,6 +1,8 @@
 import { razorpay } from "../services/razorpay.service.js";
 import AppointmentModel from "../models/appointment.model.js";
 
+
+
 export const createPaymentOrder = async (req, res) => {
   try {
     const { appointmentId, fees } = req.body;

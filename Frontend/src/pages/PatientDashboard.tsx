@@ -11,6 +11,19 @@ const PatientDashboard = () => {
   const [upcoming, setUpcoming] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // ✅ Load Razorpay script
+  useEffect(() => {
+    const razorpayScriptId = "razorpay-checkout-js";
+    if (!document.getElementById(razorpayScriptId)) {
+      const script = document.createElement("script");
+      script.id = razorpayScriptId;
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.async = true;
+      document.body.appendChild(script);
+    }
+  }, []);
+
+  // ✅ Fetch profile + appointments
   useEffect(() => {
     const fetchUserAndAppointments = async () => {
       try {
@@ -20,7 +33,6 @@ const PatientDashboard = () => {
         );
         setUser(userRes.data.user);
 
-        // ✅ Check role before making appointment API call
         if (userRes.data.user.role === "patient") {
           const apptRes = await axios.get(
             "http://localhost:9000/api/appointments/my-appointments",
@@ -42,6 +54,67 @@ const PatientDashboard = () => {
 
     fetchUserAndAppointments();
   }, []);
+
+  // ✅ Handle Razorpay Payment
+  const handlePayment = async (appt: any) => {
+    try {
+      const res = await axios.post(
+        "http://localhost:9000/api/payment",
+        {
+          appointmentId: appt._id,
+          fees: appt.doctorId.fees,
+        },
+        { withCredentials: true }
+      );
+
+      const { orderId, amount, currency } = res.data;
+
+      const options = {
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID || "rzp_test_123456",
+        amount: amount.toString(),
+        currency,
+        name: "DocLink",
+        description: "Appointment Payment",
+        image: "/logo.png",
+        order_id: orderId,
+        handler: async function (response: any) {
+          const { razorpay_payment_id, razorpay_order_id, razorpay_signature } =
+            response;
+
+          const verifyRes = await axios.post(
+            "http://localhost:9000/api/verify",
+            {
+              appointmentId: appt._id,
+              paymentId: razorpay_payment_id,
+              orderId: razorpay_order_id,
+              signature: razorpay_signature,
+            },
+            { withCredentials: true }
+          );
+
+          if (verifyRes.data.success) {
+            toast.success("Payment successful!");
+            window.location.reload();
+          } else {
+            toast.error("Payment verification failed");
+          }
+        },
+        prefill: {
+          name: appt.patientId.name,
+          email: appt.patientId.email,
+        },
+        theme: {
+          color: "#1e40af",
+        },
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.open();
+    } catch (err: any) {
+      console.error("Payment error", err);
+      toast.error(err.response?.data?.message || "Payment failed");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -140,11 +213,14 @@ const PatientDashboard = () => {
                       <p className="text-sm font-medium text-green-600">
                         {appt.status.toUpperCase()}
                       </p>
+                      <p className="text-sm font-medium text-blue-600">
+                        <strong>OTP</strong>: {appt.otp}
+                      </p>
 
-                      {appt.status !== "paid" && (
-                        // TODO: Add payment functionality here
+                      {/* ✅ Show Pay Now only if not already paid */}
+                      {appt.paymentStatus !== "paid" && (
                         <button
-                         
+                          onClick={() => handlePayment(appt)}
                           className="mt-2 inline-block px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
                         >
                           Pay Now
