@@ -1,13 +1,19 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import toast from "react-hot-toast";
-import { User, CalendarDays, Mail } from "lucide-react";
 import { Dialog } from "@headlessui/react";
+import { User, CalendarDays, Mail } from "lucide-react";
 
 // Interfaces
 interface Slot {
   date: string;
   time: string;
+  isBooked: boolean;
+}
+
+interface Stats {
+  totalAppointments: number;
+  completed: number;
 }
 
 interface Doctor {
@@ -17,6 +23,7 @@ interface Doctor {
   bio: string;
   location: string;
   fees: number;
+  availableSlots: Slot[];
 }
 
 interface Patient {
@@ -36,18 +43,28 @@ interface Appointment {
 }
 
 const DoctorsDashboard = () => {
+  // Existing states
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [statsLoading, setStatsLoading] = useState(true);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [otp, setOtp] = useState("");
   const [showDialog, setShowDialog] = useState(false);
 
+  // Availability dialog state
+  const [availabilityDialogOpen, setAvailabilityDialogOpen] = useState(false);
+  const [slots, setSlots] = useState<Slot[]>([]);
+  const [currentDate, setCurrentDate] = useState("");
+  const [currentTime, setCurrentTime] = useState("");
+  const [submittingSlots, setSubmittingSlots] = useState(false);
+
+  // Fetch appointments
   const fetchAppointments = async () => {
     try {
       const res = await axios.get("http://localhost:9000/api/appointments/doctorsViewAllAppointments", {
         withCredentials: true,
       });
-
       const appointments = res.data?.appointments || res.data?.data?.appointments || [];
       setAppointments(appointments);
     } catch (error: any) {
@@ -58,6 +75,60 @@ const DoctorsDashboard = () => {
     }
   };
 
+  // Fetch stats
+  const fetchStats = async () => {
+    try {
+      const res = await axios.get("http://localhost:9000/api/doctors/statistics", {
+        withCredentials: true,
+      });
+      setStats(res.data);
+    } catch (error: any) {
+      console.error("❌ Error fetching stats:", error);
+      toast.error("Failed to fetch doctor stats");
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  // Add slot to local list
+  const addSlot = () => {
+    if (!currentDate || !currentTime) {
+      toast.error("Please provide both date and time");
+      return;
+    }
+    setSlots(prev => [
+      ...prev,
+      { date: currentDate, time: currentTime, isBooked: false }
+    ]);
+    setCurrentDate("");
+    setCurrentTime("");
+  };
+
+  // Submit availability
+  const submitAvailability = async () => {
+    if (slots.length === 0) {
+      toast.error("Add at least one slot");
+      return;
+    }
+    try {
+      setSubmittingSlots(true);
+      const res = await axios.patch(
+        "http://localhost:9000/api/doctor/availability",
+        { availableSlots: slots },
+        { withCredentials: true }
+      );
+      toast.success(res.data.message || "Availability updated");
+      setSlots([]);
+      setAvailabilityDialogOpen(false);
+    } catch (err: any) {
+      console.error("❌ Availability update failed:", err);
+      toast.error(err.response?.data?.message || "Failed to update availability");
+    } finally {
+      setSubmittingSlots(false);
+    }
+  };
+
+  // Confirm appointment
   const confirmAppointment = async () => {
     if (!otp || otp.length !== 6) {
       toast.error("Please enter a valid 6-digit OTP");
@@ -69,13 +140,14 @@ const DoctorsDashboard = () => {
     try {
       const res = await axios.patch(
         `http://localhost:9000/api/appointments/updateAppointmentStatus/${selectedAppointment._id}`,
-        {otp: Number(otp),   action: "done" },
+        { otp: Number(otp), action: "done" },
         { withCredentials: true }
       );
       toast.success(res.data.message);
       setShowDialog(false);
       setOtp("");
       fetchAppointments();
+      fetchStats();
     } catch (err: any) {
       console.error(err);
       toast.error(err.response?.data?.message || "Failed to confirm appointment");
@@ -84,6 +156,7 @@ const DoctorsDashboard = () => {
 
   useEffect(() => {
     fetchAppointments();
+    fetchStats();
   }, []);
 
   if (loading) {
@@ -94,7 +167,36 @@ const DoctorsDashboard = () => {
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold text-blue-800">Doctor's Booked Appointments</h1>
+      <h1 className="text-2xl font-bold text-blue-800">Doctor's Dashboard</h1>
+
+      {/* Button to open availability dialog */}
+      <button
+        onClick={() => setAvailabilityDialogOpen(true)}
+        className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+      >
+        Add Availability
+      </button>
+
+      {/* Stats */}
+      <div className="bg-white p-4 rounded shadow border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        {statsLoading ? (
+          <p className="text-gray-500">Loading stats...</p>
+        ) : stats ? (
+          <>
+            <p className="text-gray-700 font-medium">
+              Total Appointments: <span className="font-bold">{stats.totalAppointments}</span>
+            </p>
+            <p className="text-gray-700 font-medium">
+              Completed: <span className="font-bold">{stats.completed}</span>
+            </p>
+          </>
+        ) : (
+          <p className="text-red-500">Failed to load stats</p>
+        )}
+      </div>
+
+      {/* Appointments */}
+      <h2 className="text-xl font-semibold text-blue-700">Booked Appointments</h2>
 
       {bookedAppointments.length === 0 ? (
         <p className="text-gray-500">No booked appointments available.</p>
@@ -144,6 +246,63 @@ const DoctorsDashboard = () => {
           ))}
         </div>
       )}
+
+      {/* Availability Dialog */}
+      <Dialog open={availabilityDialogOpen} onClose={() => setAvailabilityDialogOpen(false)} className="fixed z-10 inset-0 overflow-y-auto">
+        <div className="flex items-center justify-center min-h-screen bg-black bg-opacity-50">
+          <Dialog.Panel className="bg-white rounded-xl p-6 w-full max-w-md space-y-4">
+            <Dialog.Title className="text-lg font-semibold">Add Available Slot</Dialog.Title>
+
+            <div className="space-y-2">
+              <input
+                type="date"
+                value={currentDate}
+                onChange={(e) => setCurrentDate(e.target.value)}
+                className="w-full border rounded px-3 py-2"
+              />
+              <input
+                type="time"
+                value={currentTime}
+                onChange={(e) => setCurrentTime(e.target.value)}
+                className="w-full border rounded px-3 py-2"
+              />
+              <button
+                onClick={addSlot}
+                className="bg-blue-600 text-white w-full py-2 rounded hover:bg-blue-700"
+              >
+                Add Slot
+              </button>
+            </div>
+
+            {slots.length > 0 && (
+              <div className="border p-2 rounded bg-gray-50 space-y-1">
+                <p className="font-medium">Slots to be added:</p>
+                {slots.map((s, idx) => (
+                  <div key={idx} className="text-sm text-gray-700">
+                    {s.date} at {s.time}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={() => setAvailabilityDialogOpen(false)}
+                className="px-4 py-2 rounded bg-gray-200 text-gray-700 hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitAvailability}
+                disabled={submittingSlots}
+                className="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700"
+              >
+                {submittingSlots ? "Submitting..." : "Submit All Slots"}
+              </button>
+            </div>
+          </Dialog.Panel>
+        </div>
+      </Dialog>
 
       {/* OTP Dialog */}
       <Dialog open={showDialog} onClose={() => setShowDialog(false)} className="fixed z-10 inset-0 overflow-y-auto">

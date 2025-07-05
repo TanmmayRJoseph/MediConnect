@@ -136,20 +136,24 @@ export const deleteDoctorByIdController = async (req, res) => {
 
 export const updateAvailabilityController = async (req, res) => {
   try {
-    const doctor = await Doctor.findById(req.params.id);
+    const doctor = await Doctor.findOne({ userId: req.user._id });
     if (!doctor) {
       return res.status(404).json({ message: "Doctor not found" });
     }
+
     doctor.availableSlots = req.body.availableSlots;
     await doctor.save();
-    res
-      .status(200)
-      .json({ message: "Availability updated successfully", doctor });
+
+    res.status(200).json({
+      message: "Availability updated successfully",
+      doctor,
+    });
   } catch (err) {
-    console.log(err);
+    console.error("❌ Error updating availability:", err);
     res.status(500).json({ message: err.message });
   }
 };
+
 
 export const updateDoctorPicController = async (req, res) => {
   try {
@@ -182,37 +186,33 @@ export const updateDoctorPicController = async (req, res) => {
 
 export const getDoctorAppointmentStats = async (req, res) => {
   try {
-    // Extract doctorId from the token
-    const doctorId = req.user._id;
-    if (!doctorId) {
+    if (!req.user || !req.user._id) {
       return res.status(401).json({ message: "Unauthorized access." });
     }
+
     if (req.user.role !== "doctor") {
       return res.status(403).json({ message: "Forbidden access." });
     }
 
-    // Fetch all appointments for the doctor
-    const appointments = await AppointmentModel.find({ doctorId });
+    // Fetch doctor profile
+    const doctor = await Doctor.findOne({ userId: req.user._id });
+    if (!doctor) {
+      return res.status(404).json({ message: "Doctor profile not found." });
+    }
 
-    // Calculate the statistics
-    const totalAppointments = appointments.length;
-    const upcoming = appointments.filter(
-      (app) => app.status === "booked"
-    ).length;
-    const completed = appointments.filter(
-      (app) => app.status === "done"
-    ).length;
-    const cancelled = appointments.filter(
-      (app) => app.status === "cancelled"
-    ).length;
+    // Now use doctor._id to query appointments
+    const doctorId = doctor._id;
 
-    // Return the statistics
+    const [totalAppointments, completed] = await Promise.all([
+      AppointmentModel.countDocuments({ doctorId }),
+      AppointmentModel.countDocuments({ doctorId, status: "done" }),
+    ]);
+
     res.status(200).json({
       totalAppointments,
-      upcoming,
-      completed,
-      cancelled,
+      completed
     });
+
   } catch (error) {
     console.error("Error fetching appointment stats:", error);
     res.status(500).json({
@@ -221,3 +221,7 @@ export const getDoctorAppointmentStats = async (req, res) => {
     });
   }
 };
+
+
+
+

@@ -81,7 +81,7 @@ const JoinAsDoctorPage = () => {
         }
       );
       toast.success("Doctor profile created successfully!");
-      navigate("/patient-dashboard");
+      navigate("/doctor-dashboard");
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to create profile");
     } finally {
